@@ -7,16 +7,16 @@ from PIL import Image
 from io import BytesIO
 import cv2
 import numpy as np
-import shutil
 
 try:
     # Try setting local path (Windows dev)
     if os.name == "nt":
         pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    # else:
-        # Try setting path for Linux (Docker)
-        # pytesseract.pytesseract.tesseract_cmd = shutil.which("tesseract") or "/usr/bin/tesseract"    
-except Exception:
+    else:
+        # Set path for Linux (Docker)
+        pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"    
+except Exception as e:
+    print(f"Error setting tesseract path: {e}")
     pass
 
 
