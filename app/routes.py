@@ -87,20 +87,25 @@ def extract_title_from_image_url(image_url):
     except Exception as e:
         return f"Error processing image: {str(e)}"
     
-# Debug function to log tesseract status
-def check_tesseract_setup():
-    print(f"Python version: {sys.version}")
-    print(f"Current PATH: {os.environ.get('PATH')}")
-    print(f"PYTESSERACT_PATH env: {os.environ.get('PYTESSERACT_PATH')}")
+@app.route("/debug-tesseract-full")
+def setup_tesseract():
+    
+    results = {
+        "python_version": sys.version,
+        "current_path": os.environ.get("PATH"),
+        "pytesseract_env": os.environ.get('PYTESSERACT_PATH'),
+        "original_tesseract_cmd": pytesseract.pytesseract.tesseract_cmd
+    }
     
     # Try to install tesseract if not found (may require permissions)
     try:
         if not os.path.exists("/usr/bin/tesseract"):
-            print("Tesseract not found, attempting to install...")
-            subprocess.check_call(["apt-get", "update"])
-            subprocess.check_call(["apt-get", "install", "-y", "tesseract-ocr", "tesseract-ocr-eng"])
+            results["install_attempt"] = "Tesseract not found, attempting to install..."
+            install_output = subprocess.check_output(["apt-get", "update"], stderr=subprocess.STDOUT).decode("utf-8")
+            install_output += subprocess.check_output(["apt-get", "install", "-y", "tesseract-ocr", "tesseract-ocr-eng"], stderr=subprocess.STDOUT).decode("utf-8")
+            results["install_output"] = install_output
     except Exception as e:
-        print(f"Error installing tesseract: {e}")
+        results["install_error"] = str(e)
     
     # Try setting the path
     try:
@@ -116,9 +121,42 @@ def check_tesseract_setup():
                 # Fall back to standard path
                 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
         
-        print(f"Set tesseract_cmd to: {pytesseract.pytesseract.tesseract_cmd}")
+        results["new_tesseract_cmd"] = pytesseract.pytesseract.tesseract_cmd
     except Exception as e:
-        print(f"Error setting tesseract path: {e}")
+        results["path_error"] = str(e)
+    
+    # Check if tesseract exists now
+    results["tesseract_exists"] = os.path.exists("/usr/bin/tesseract")
+    results["which_tesseract"] = shutil.which("tesseract")
+    
+    # Try running tesseract
+    try:
+        cmd = pytesseract.pytesseract.tesseract_cmd
+        version = subprocess.check_output([cmd, "--version"], stderr=subprocess.STDOUT).decode("utf-8")
+        results["tesseract_version"] = version
+    except Exception as e:
+        results["tesseract_run_error"] = str(e)
+    
+    # Try to test pytesseract with a simple image
+    try:
+        from PIL import Image
+        import io
+        
+        # Create a simple test image
+        img = Image.new('RGB', (60, 30), color = (73, 109, 137))
+        
+        # Save it to a buffer
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format='PNG')
+        img_buffer.seek(0)
+        
+        # Try to OCR it (should return empty string for blank image)
+        test_result = pytesseract.image_to_string(Image.open(img_buffer))
+        results["pytesseract_test"] = "Success! OCR works." if test_result is not None else "Failed OCR test"
+    except Exception as e:
+        results["pytesseract_test_error"] = str(e)
+    
+    return results
 
 #Add default / index route
 @app.route('/')
