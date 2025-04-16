@@ -12,6 +12,9 @@ try:
     # Try setting local path (Windows dev)
     if os.name == "nt":
         pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    else:
+        # Try setting path for Linux (Docker)
+        pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"    
 except Exception:
     pass
 
