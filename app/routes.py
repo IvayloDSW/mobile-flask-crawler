@@ -15,7 +15,7 @@ try:
         pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     else:
         # Try setting path for Linux (Docker)
-        pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"    
+        pytesseract.pytesseract.tesseract_cmd = shutil.which("tesseract") or "/usr/bin/tesseract"    
 except Exception:
     pass
 
@@ -85,12 +85,20 @@ def extract_title_from_image_url(image_url):
     except Exception as e:
         return f"Error processing image: {str(e)}"
     
-@app.route('/debug-tesseract')
+@app.route("/debug-tesseract")
 def debug_tesseract():
+    import subprocess
+    try:
+        version = subprocess.check_output(["tesseract", "--version"]).decode("utf-8")
+    except Exception as e:
+        version = f"Error: {str(e)}"
+
     return {
         "which_tesseract": shutil.which("tesseract"),
-        "expected_path": "/usr/bin/tesseract"
-    }    
+        "tesseract_cmd": pytesseract.pytesseract.tesseract_cmd,
+        "version": version
+    }
+ 
 
 #Add default / index route
 @app.route('/')
