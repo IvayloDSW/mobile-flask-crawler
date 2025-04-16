@@ -7,6 +7,7 @@ from PIL import Image
 from io import BytesIO
 import cv2
 import numpy as np
+import shutil
 
 try:
     # Try setting local path (Windows dev)
@@ -83,6 +84,13 @@ def extract_title_from_image_url(image_url):
         return possible_title
     except Exception as e:
         return f"Error processing image: {str(e)}"
+    
+@app.route('/debug-tesseract')
+def debug_tesseract():
+    return {
+        "which_tesseract": shutil.which("tesseract"),
+        "expected_path": "/usr/bin/tesseract"
+    }    
 
 #Add default / index route
 @app.route('/')
