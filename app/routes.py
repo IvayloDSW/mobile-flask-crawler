@@ -7,6 +7,7 @@ from PIL import Image
 from io import BytesIO
 import cv2
 import numpy as np
+import shutil
 
 try:
     # Try setting local path (Windows dev)
@@ -87,12 +88,43 @@ def extract_title_from_image_url(image_url):
     
 @app.route("/debug-tesseract-full")
 def debug_tesseract_full():
-    import subprocess, os
-    return {
+    import subprocess
+    import os
+    import sys
+    
+    results = {
+        "python_version": sys.version,
+        "which_tesseract": shutil.which("tesseract"),
         "env_path": os.environ.get("PATH"),
-        "list_usr_bin": subprocess.check_output(["ls", "-la", "/usr/bin"]).decode("utf-8"),
-        "tesseract_installed": subprocess.check_output(["apt", "list", "--installed", "tesseract*"]).decode("utf-8")
+        "tesseract_cmd": pytesseract.pytesseract.tesseract_cmd,
     }
+    
+    # Test if file exists
+    if os.path.exists("/usr/bin/tesseract"):
+        results["file_exists"] = True
+        results["file_permissions"] = subprocess.check_output(["ls", "-la", "/usr/bin/tesseract"]).decode("utf-8")
+    else:
+        results["file_exists"] = False
+    
+    # Try running tesseract directly
+    try:
+        results["tesseract_version"] = subprocess.check_output(["tesseract", "--version"], stderr=subprocess.STDOUT).decode("utf-8")
+    except Exception as e:
+        results["tesseract_version_error"] = str(e)
+    
+    # Try running with full path
+    try:
+        results["full_path_test"] = subprocess.check_output(["/usr/bin/tesseract", "--version"], stderr=subprocess.STDOUT).decode("utf-8")
+    except Exception as e:
+        results["full_path_error"] = str(e)
+    
+    # Check installed packages
+    try:
+        results["installed_packages"] = subprocess.check_output(["apt", "list", "--installed", "tesseract*"]).decode("utf-8")
+    except Exception as e:
+        results["installed_packages_error"] = str(e)
+    
+    return results
 
 #Add default / index route
 @app.route('/')
