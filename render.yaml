@@ -14,4 +14,10 @@ services:
     env: docker
     plan: free
     dockerfilePath: ./Dockerfile
+    buildCommand: apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng
+    envVars:
+      - key: TESSDATA_PREFIX
+        value: /usr/share/tesseract-ocr/4.00/tessdata
+      - key: PYTESSERACT_PATH
+        value: /usr/bin/tesseract
 

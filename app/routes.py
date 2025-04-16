@@ -8,6 +8,7 @@ from io import BytesIO
 import cv2
 import numpy as np
 import shutil
+import sys
 
 try:
     # Try setting local path (Windows dev)
@@ -86,45 +87,38 @@ def extract_title_from_image_url(image_url):
     except Exception as e:
         return f"Error processing image: {str(e)}"
     
-@app.route("/debug-tesseract-full")
-def debug_tesseract_full():
-    import subprocess
-    import os
-    import sys
+# Debug function to log tesseract status
+def check_tesseract_setup():
+    print(f"Python version: {sys.version}")
+    print(f"Current PATH: {os.environ.get('PATH')}")
+    print(f"PYTESSERACT_PATH env: {os.environ.get('PYTESSERACT_PATH')}")
     
-    results = {
-        "python_version": sys.version,
-        "which_tesseract": shutil.which("tesseract"),
-        "env_path": os.environ.get("PATH"),
-        "tesseract_cmd": pytesseract.pytesseract.tesseract_cmd,
-    }
-    
-    # Test if file exists
-    if os.path.exists("/usr/bin/tesseract"):
-        results["file_exists"] = True
-        results["file_permissions"] = subprocess.check_output(["ls", "-la", "/usr/bin/tesseract"]).decode("utf-8")
-    else:
-        results["file_exists"] = False
-    
-    # Try running tesseract directly
+    # Try to install tesseract if not found (may require permissions)
     try:
-        results["tesseract_version"] = subprocess.check_output(["tesseract", "--version"], stderr=subprocess.STDOUT).decode("utf-8")
+        if not os.path.exists("/usr/bin/tesseract"):
+            print("Tesseract not found, attempting to install...")
+            subprocess.check_call(["apt-get", "update"])
+            subprocess.check_call(["apt-get", "install", "-y", "tesseract-ocr", "tesseract-ocr-eng"])
     except Exception as e:
-        results["tesseract_version_error"] = str(e)
+        print(f"Error installing tesseract: {e}")
     
-    # Try running with full path
+    # Try setting the path
     try:
-        results["full_path_test"] = subprocess.check_output(["/usr/bin/tesseract", "--version"], stderr=subprocess.STDOUT).decode("utf-8")
+        # Try setting local path (Windows dev)
+        if os.name == "nt":
+            pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+        else:
+            # Check if custom env var is set
+            env_path = os.environ.get('PYTESSERACT_PATH')
+            if env_path:
+                pytesseract.pytesseract.tesseract_cmd = env_path
+            else:
+                # Fall back to standard path
+                pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+        
+        print(f"Set tesseract_cmd to: {pytesseract.pytesseract.tesseract_cmd}")
     except Exception as e:
-        results["full_path_error"] = str(e)
-    
-    # Check installed packages
-    try:
-        results["installed_packages"] = subprocess.check_output(["apt", "list", "--installed", "tesseract*"]).decode("utf-8")
-    except Exception as e:
-        results["installed_packages_error"] = str(e)
-    
-    return results
+        print(f"Error setting tesseract path: {e}")
 
 #Add default / index route
 @app.route('/')
