@@ -16,7 +16,7 @@ try:
         pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     else:
         # Set path for Linux (Docker)
-        pytesseract.pytesseract.tesseract_cmd = "/opt/render/project/src/.venv/bin:/home/render/.bun/bin:/opt/render/project/nodes/node-22.14.0/bin:/opt/render/project/src/.venv/bin:/opt/render/project/poetry/bin:/home/render/.python-poetry/bin:/usr/local/cargo/bin:/opt/render/project/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/render/bin"    
+        pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 except Exception as e:
     print(f"Error setting tesseract path: {e}")
     pass
