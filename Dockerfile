@@ -20,11 +20,16 @@ WORKDIR /app
 # Copy files
 COPY . /app
 
+# Set env for pytesseract - set before installing requirements
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
+ENV PATH="/usr/bin:${PATH}"
+ENV PYTHONPATH="/app:${PYTHONPATH}"
+
+# Explicitly set pytesseract cmd path
+RUN echo "import pytesseract; pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'" > set_tesseract_path.py
+
 # Install Python deps
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Set env for pytesseract
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
-
 # Run your app
-CMD ["python3", "main.py"]
+CMD ["python3", "-c", "import set_tesseract_path; import main"]
