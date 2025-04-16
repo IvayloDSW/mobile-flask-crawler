@@ -8,40 +8,61 @@ from io import BytesIO
 import cv2
 import numpy as np
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+try:
+    # Try setting local path (Windows dev)
+    if os.name == "nt":
+        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+except Exception:
+    pass
+
 
 
 from app import app
 
-# app = Flask(__name__)
-def extract_text_from_url(image_url):
+def extract_text_from_url(image_url, title_to_find):
     try:
         # Load image from URL
         response = requests.get(image_url)
         image = Image.open(BytesIO(response.content)).convert('RGB')
-
-        # Convert to OpenCV format
         img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        image_width = img_cv.shape[1]
+        image_height = img_cv.shape[0]
 
-        # Preprocessing: grayscale, threshold
+        # Preprocessing
         gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
         _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        
-        cv2.imwrite("debug_thresh.png", thresh) # Save for debugging
-        
-        config = "--psm 6"
-        text = pytesseract.image_to_string(thresh, config=config)
-        
-        # Optional: resize if needed
-        print(f"Image size thresh: {thresh}")
-        # text = pytesseract.image_to_string(thresh)
-        
-        print(f"Extracted text: {text}")
+        cv2.imwrite("debug_thresh.png", thresh)
 
-        return text.strip()
+        # Use pytesseract to get detailed data
+        config = "--psm 6"
+        data = pytesseract.image_to_data(thresh, config=config, output_type=pytesseract.Output.DICT)
+
+        found = False
+        for i, text in enumerate(data["text"]):
+            if text.strip().lower() == title_to_find.strip().lower():
+                x = data["left"][i]
+                y = data["top"][i]
+                w = data["width"][i]
+                h = data["height"][i]
+
+                height_percent = (h / image_height) * 100
+                found = True
+
+                print(f"Title: '{text}'")
+                print(f"Bounding box: x={x}, y={y}, w={w}, h={h}")
+                print(f"Height percent of image: {height_percent:.2f}%")
+
+                return {
+                    "text": text,
+                    "bounding_box": (x, y, w, h),
+                    "height_percent": height_percent
+                }
+
+        if not found:
+            return {"error": "Title not found in image."}
 
     except Exception as e:
-        return f"Error processing image: {e}"
+        return {"error": f"Error processing image: {e}"}
     
 def extract_title_from_image_url(image_url):
     try:
@@ -73,11 +94,12 @@ def predict_title():
         return jsonify({'error': 'Missing "url" in request'}), 400
     
     image_url = data['url']
+    title = data['title']
     
     print(f"Received image URL: {image_url}")
     # title = extract_title_from_image_url(image_url)
-    title = extract_text_from_url(image_url)
-    return jsonify({'title': title})
+    response = extract_text_from_url(image_url, title)
+    return jsonify({'title': response})
 
 
 @app.route('/crawl', methods=['POST'])
