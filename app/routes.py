@@ -87,7 +87,7 @@ def extract_title_from_image_url(image_url):
     except Exception as e:
         return f"Error processing image: {str(e)}"
     
-@app.route("/debug-tesseract-full")
+@app.route("/setup-tesseract")
 def setup_tesseract():
     
     results = {
