@@ -1,0 +1,16 @@
+# services:
+#   - type: web
+#     name: mobile-flask-crawler
+#     runtime: python
+#     buildCommand: |
+#       apt-get update && apt-get install -y tesseract-ocr libsm6 libxext6 libxrender-dev
+#       pip install -r requirements.txt
+#     startCommand: python main.py
+
+
+services:
+  - type: web
+    name: mobile-flask-crawler
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile

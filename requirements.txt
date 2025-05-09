@@ -1,0 +1,10 @@
+Flask==2.2.2
+Scrapy==2.12.0
+werkzeug==2.3.7
+crochet
+pytesseract
+Pillow
+requests
+opencv-python
+google-cloud-vision
+
