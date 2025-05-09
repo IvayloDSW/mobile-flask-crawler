@@ -80,6 +80,7 @@ def analyze_search():
     # Call the analyze method
     analyzer.analyze()
     print(f"Analyzed data: {data}")
+    # Return the analyzed data
     
     # Retturn data as json
     return jsonify(data)
