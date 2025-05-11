@@ -1,65 +1,197 @@
 from flask import Flask, request, jsonify
 import subprocess
-import pytesseract
-import requests
 import os
-from PIL import Image
-from io import BytesIO
-import cv2
-import numpy as np
-import shutil
-import sys
-import difflib
-from models.images.extract_text_image import ExtractTextImage
-from models.amazon.analyze_brand_title import AnalyzeBrandTitle
+import json
+# from models.amazon.analyze_brand_title import ProductTitleExtractor
+from models.amazon.analyze_image_texts import AnalyzeImageTexts
 from managers.amazon.AmazonScraperManager import AmazonScraperManager
+from models.amazon.sefl_title_predictor import SelfLearningTitlePredictor
+from models.amazon.title_predictor_demo import TitlePredictorDemo
 
-
-try:
-    # Try setting local path (Windows dev)
-    if os.name == "nt":
-        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    else:
-        # Set path for Linux (Docker)
-        pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-except Exception as e:
-    print(f"Error setting tesseract path: {e}")
-    pass
-
-# Load EAST text detector
-# net = cv2.dnn.readNet("frozen_east_text_detection.pb")
-# Process with EAST to find text regions first, then apply OCR only to those regions
 
 from app import app
 
-
-def is_similar(a, b, threshold=0.7):
-    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() > threshold
-
+class TitlePredictionService:
+    def __init__(self, memory_file="title_predictor_memory.json"):
+        self.memory_file = memory_file
+        self.stats = {
+            "predictions": 0,
+            "feedback_received": 0,
+            "avg_similarity": 0.0
+        }
     
-def extract_title_from_image_url(image_url):
-    try:
-        response = requests.get(image_url)
-        img = Image.open(BytesIO(response.content))
-        img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+    def predict_title(self, data):
+        """Make a prediction for a single item"""
+        predictor = SelfLearningTitlePredictor(data, self.memory_file)
+        prediction = predictor.predict()
         
-        print(f"Image URL: {image_url}")
-        print(f"Image size: {img.size}")
-        
-        text = pytesseract.image_to_string(img_cv)
-        print(f"Extracted text: {text}")
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
-        possible_title = max(lines, key=len) if lines else "Unknown Product"
-        return possible_title
-    except Exception as e:
-        return f"Error processing image: {str(e)}"
+        self.stats["predictions"] += 1
+        return prediction
     
+    def batch_predict(self, items):
+        """Process multiple items and make predictions"""
+        results = []
+        
+        for item in items:
+            prediction = self.predict_title(item)
+            
+            # Add the prediction to results
+            results.append({
+                "item_id": item.get("id", "unknown"),
+                "brand": item.get("brand", ""),
+                "original_title": item.get("title", ""),
+                "predicted_title": prediction.get("predicted_title", ""),
+                "confidence_metrics": {
+                    "height_percent": prediction.get("height_percent", 0),
+                    "contrast_ratio": prediction.get("average_contrast_ratio", 0),
+                    "visible_ratio": prediction.get("visible_ratio", 0)
+                }
+            })
+        
+        return results
+    
+    def provide_feedback(self, item_id, original_prediction, corrected_title):
+        """
+        Process feedback for an item
+        
+        Args:
+            item_id: ID of the item to provide feedback for
+            original_prediction: Original prediction made by the system
+            corrected_title: Corrected title provided by user
+            
+        Returns:
+            Dictionary with feedback results
+        """
+        try:
+            # Try to load the temp item data
+            temp_file = f"temp_data_{item_id}.json"
+            
+            if not os.path.exists(temp_file):
+                return {
+                    "success": False,
+                    "error": f"Item data not found for ID: {item_id}"
+                }
+            
+            with open(temp_file, 'r') as f:
+                item_data = json.load(f)
+            
+            # Create predictor with the loaded data
+            predictor = SelfLearningTitlePredictor(item_data, self.memory_file)
+            
+            # Explicitly set the item attribute
+            predictor.item = item_data
+            
+            # If original_prediction is provided, manually set it as the previous prediction
+            if original_prediction:
+                predictor.previous_predictions = {
+                    'predicted_title': original_prediction
+                }
+            
+            # Process the feedback
+            result = predictor.give_feedback(corrected_title)
+            
+            if not result:
+                return {
+                    "success": False,
+                    "error": "Failed to process feedback - internal predictor error"
+                }
+            
+            return {
+                "success": True,
+                "similarity": result.get("similarity", 0),
+                "item_id": item_id
+            }
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {
+                "success": False,
+                "error": f"Exception occurred: {str(e)}"
+            }
+    
+    def get_learning_stats(self):
+        """Get stats about the learning progress"""
+        # Create a temporary predictor just to access memory
+        temp_predictor = SelfLearningTitlePredictor({}, self.memory_file)
+        
+        top_patterns = dict(sorted(
+            temp_predictor.successful_patterns.items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        )[:10])
+        
+        return {
+            "predictions_made": self.stats["predictions"],
+            "feedback_received": self.stats["feedback_received"],
+            "average_similarity": round(self.stats["avg_similarity"], 2),
+            "top_learned_patterns": top_patterns,
+            "current_parameters": temp_predictor.params
+        }
+
+# Create a service instance
+title_service = TitlePredictionService()    
+
 
 #Add default / index route
 @app.route('/')
 def index():
-    print("Index route accessed")
     return "Welcome to the Scrapy API!"
+
+
+@app.route('/predict', methods=['POST'])
+def predict_titles():
+    """API endpoint for predicting titles"""
+    if not request.json or 'items' not in request.json:
+        return jsonify({"error": "Invalid request"}), 400
+    
+    items = request.json['items']
+    
+    # For each item, temporarily store the data for feedback purposes
+    for item in items:
+        item_id = item.get("id", f"temp_{hash(json.dumps(item))}")
+        with open(f"temp_data_{item_id}.json", 'w') as f:
+            json.dump(item, f)
+    
+    # Process items and make predictions
+    results = title_service.batch_predict(items)
+    
+    return jsonify({
+        "results": results,
+        "stats": title_service.get_learning_stats()
+    })
+
+@app.route('/feedback', methods=['POST'])
+def provide_feedback():
+    """API endpoint for providing feedback"""
+    if not request.json:
+        return jsonify({"error": "Invalid request"}), 400
+    
+    item_id = request.json.get('item_id')
+    original_prediction = request.json.get('original_prediction')
+    corrected_title = request.json.get('corrected_title')
+    
+    print(f"Feedback received for item {item_id}: {corrected_title}")
+    
+    if not item_id or not corrected_title:
+        return jsonify({"error": "Missing required fields"}), 400
+    
+    result = title_service.provide_feedback(item_id, original_prediction, corrected_title)
+    
+    print(f"Feedback processing result: {result}")
+    
+    if not result.get("success"):
+        return jsonify({"error": result.get("error", "Failed to process feedback")}), 400
+    
+    return jsonify({
+        "success": True,
+        "stats": title_service.get_learning_stats()
+    })
+
+@app.route('/learning-stats', methods=['GET'])
+def get_learning_stats():
+    """API endpoint for getting learning stats"""
+    return jsonify(title_service.get_learning_stats())
 
 # Analyze scraped result from search page in Amazon
 @app.route('/analyze-search', methods=['POST'])
@@ -75,15 +207,45 @@ def analyze_search():
         return jsonify({'error': 'No data provided.'}), 400
     
     # analyze the data
-    analyzer = AnalyzeBrandTitle(data)
+    # analyzer = ProductTitleExtractor(data)
+    analyzerv2 = AnalyzeImageTexts(data)
     
-    # Call the analyze method
-    analyzer.analyze()
-    print(f"Analyzed data: {data}")
-    # Return the analyzed data
+    # processed_data = analyzer.analyze()
+    processed_data = analyzerv2.analyze()
     
-    # Retturn data as json
-    return jsonify(data)
+     # Add title predictions to each item in processed_data
+    # for item in processed_data:
+    #     # Make prediction with self-learning model
+    #     prediction = title_service.predict_title(item)
+        
+    #     print(f"Item - Prediction: final prediction", prediction)
+        
+    #     # Add prediction to item
+    #     item['predicted_title'] = prediction.get('predicted_title')
+    #     item['prediction_metrics'] = {
+    #         'height_percent': prediction.get('height_percent'),
+    #         'contrast_ratio': prediction.get('average_contrast_ratio'),
+    #         'visible_ratio': prediction.get('visible_ratio')
+    #     }
+        
+    # Run demo
+    # correct_titles = {
+    #     "item_1": "beauty bar with deep moisture",
+    #     "item_2": "moisture",
+    #     "item_3": "sensitive",
+    # }
+    # demo = TitlePredictorDemo()
+    # results = demo.run_demo(processed_data, correct_titles)    
+    # # Print results
+    # print("\n==== DEMO RESULTS ====")
+    # print("Initial Predictions:")
+    # print(results["initial_predictions"])
+    
+    
+    return jsonify({
+        "items": processed_data,
+        # "learning_stats": title_service.get_learning_stats()
+    })
 
 # Add search route
 @app.route('/search', methods=['POST'])
@@ -106,12 +268,7 @@ def predict_title():
     image_url = data['url']
     title = data['title']
     
-    print(f"Received image URL and title: {image_url}, {title}")
-    # title = extract_title_from_image_url(image_url)
-    image_extractor = ExtractTextImage(image_path=image_url, title=title)
-    response = image_extractor.extract_text_from_url()
-    # response = extract_text_from_url(image_url, title)
-    return jsonify({'title': response})
+    return jsonify({'title': title, 'url': image_url})
 
 
 @app.route('/crawl', methods=['POST'])
@@ -121,8 +278,6 @@ def crawl():
     
     if not start_url:
         return jsonify({'error': 'Missing "start_url" in request'}), 400
-    
-    print(f"Received start_url: {start_url}")
     
     scraper = AmazonScraperManager()
     
@@ -134,42 +289,3 @@ def crawl():
     else:
         # If there was an error, return with appropriate status code
         return jsonify(result), 500
-
-    # Define the path to your Scrapy project
-    scrapy_project_path = os.path.join(os.getcwd(), 'scrapy_spider')
-
-    # Define the absolute path for the output file
-    output_file_path = os.path.join(os.getcwd(), 'output.json')
-
-    # Construct the Scrapy command
-    command = [
-        'scrapy', 'crawl', 'example_spider',
-        '-a', f'start_url={start_url}',
-        '-o', output_file_path
-    ]
-
-    try:
-        # Run the Scrapy command
-        result = subprocess.run(
-            command,
-            cwd=scrapy_project_path,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True  # This will raise an exception for non-zero exit codes
-        )
-
-        # Check if the output file exists
-        if os.path.exists(output_file_path):
-            with open(output_file_path, 'r') as file:
-                data = file.read()
-            return jsonify({'data': data})
-        else:
-            return jsonify({'error': 'Output file not found.'}), 500
-
-    except subprocess.CalledProcessError as e:
-        # Handle errors in the subprocess
-        return jsonify({'error': f'Scrapy command failed: {e.stderr}'}), 500
-    except Exception as e:
-        # Handle other exceptions
-        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
