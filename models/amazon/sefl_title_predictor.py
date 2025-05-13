@@ -222,6 +222,12 @@ class SelfLearningTitlePredictor:
         print(f"Prediction: {prediction}")
         
         # Store this prediction for learning
+        # Option 1: If self.previous_predictions should be a list
+        # Initialize self.previous_predictions as a list if it doesn't exist or is a dict
+        if not hasattr(self, 'previous_predictions') or not isinstance(self.previous_predictions, list):
+            self.previous_predictions = []
+
+        # Now append to the list
         self.previous_predictions.append({
             "input": {
                 "brand": self.brand,

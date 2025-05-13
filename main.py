@@ -1,5 +1,7 @@
 import os
 from app.routes import app
+from routes.route_model import *
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
