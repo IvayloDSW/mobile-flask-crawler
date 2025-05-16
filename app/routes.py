@@ -1,11 +1,8 @@
 from flask import Flask, Blueprint, request, jsonify
-import subprocess
-import os
-import json
 # from models.amazon.analyze_brand_title import ProductTitleExtractor
 from models.amazon.analyze_image_texts import AnalyzeImageTexts
 from managers.amazon.AmazonScraperManager import AmazonScraperManager
-from models.amazon.title_predictor_demo import TitlePredictorDemo
+# from models.amazon.title_predictor_demo import TitlePredictorDemo
 from models.amazon.title_prediction_service import TitlePredictionService
 from database.supabase import SupabaseManager
 
@@ -42,18 +39,14 @@ def analyze_search():
         return jsonify({'error': 'No data provided.'}), 400
     
     # analyze the data
-    # analyzer = ProductTitleExtractor(data)
-    analyzerv2 = AnalyzeImageTexts(products)
+    analyzer = AnalyzeImageTexts(products)
     
-    # processed_data = analyzer.analyze()
-    processed_data = analyzerv2.analyze()
+    processed_data = analyzer.analyze()
     
     # Add title predictions to each item in processed_data
     for item in processed_data:
         # Make prediction with self-learning model
         prediction = title_service.predict_title(item)
-        
-        # print(f"Item - Prediction: final prediction", prediction)
         
         # Add prediction to item
         item['predicted_title'] = prediction.get('predicted_title')
@@ -62,19 +55,6 @@ def analyze_search():
             'contrast_ratio': prediction.get('average_contrast_ratio'),
             'visible_ratio': prediction.get('visible_ratio')
         }
-        
-    # Run demo
-    # correct_titles = {
-    #     "item_1": "beauty bar with deep moisture",
-    #     "item_2": "moisture",
-    #     "item_3": "sensitive",
-    # }
-    # demo = TitlePredictorDemo()
-    # results = demo.run_demo(processed_data, correct_titles)    
-    # # Print results
-    # print("\n==== DEMO RESULTS ====")
-    # print("Initial Predictions:")
-    # print(results["initial_predictions"])
     
     response = {
         "items": processed_data,

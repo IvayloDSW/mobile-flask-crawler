@@ -1,7 +1,7 @@
 from google.cloud import vision
 import requests
 from io import BytesIO
-from PIL import Image, ImageStat
+from PIL import Image
 from typing import Dict, List, Any, Tuple, Optional
 import numpy as np
 import math
@@ -9,7 +9,7 @@ from scipy.ndimage import binary_dilation, gaussian_filter
 from skimage.filters import threshold_otsu
 from sklearn.cluster import KMeans
 from models.amazon.title_predicted import TitlePredictor
-from models.amazon.sefl_title_predictor import SelfLearningTitlePredictor
+# from models.amazon.sefl_title_predictor import SelfLearningTitlePredictor
 
 def rgb_to_hex(rgb: Tuple[int, int, int]) -> str:
     """Convert RGB tuple to hex color code."""
@@ -226,6 +226,56 @@ class AnalyzeImageTexts:
             return "small"
         else:
             return "very small"
+            
+    def find_brand_mentions(self, extracted_rows: List[Dict[str, Any]], brand: str) -> List[Dict[str, Any]]:
+        """
+        Find all instances of brand mentions in extracted text rows.
+        
+        Args:
+            extracted_rows: List of extracted text rows with their properties
+            brand: Brand name to search for
+            
+        Returns:
+            List of rows (with their complete data) that contain the brand name
+        """
+        if not brand or not extracted_rows:
+            return []
+            
+        brand_mentions = []
+        brand_lower = brand.lower()
+        
+        for row in extracted_rows:
+            text_lower = row['text'].lower()
+            
+            # Check if brand name is in the text
+            # Use word boundary detection to avoid partial matches
+            if brand_lower in text_lower:
+                # Calculate additional metrics for brand mentions
+                word_start_idx = text_lower.find(brand_lower)
+                word_end_idx = word_start_idx + len(brand_lower)
+                
+                # Check if brand is a complete word (surrounded by spaces or punctuation)
+                is_complete_word = (
+                    (word_start_idx == 0 or not text_lower[word_start_idx-1].isalnum()) and
+                    (word_end_idx == len(text_lower) or not text_lower[word_end_idx].isalnum())
+                )
+                
+                # Create a copy of the row data with brand info
+                brand_row = {
+                    **row,
+                    'brand_match': {
+                        'is_exact_match': text_lower == brand_lower,
+                        'is_complete_word': is_complete_word,
+                        'start_index': word_start_idx,
+                        'end_index': word_end_idx,
+                        'brand': brand
+                    }
+                }
+                brand_mentions.append(brand_row)
+                
+        # Sort by position (top to bottom)
+        brand_mentions.sort(key=lambda r: r['position_percentage'])
+        return brand_mentions
 
     def predict_product_title(self, item_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -241,17 +291,11 @@ class AnalyzeImageTexts:
         predictor = TitlePredictor(item_data)
         title_prediction = predictor.predict_title()
         
-        # model_predictor = SelfLearningTitlePredictor(item_data)
-        # model_title_prediction = model_predictor.predict()
-        # print(f"Title prediction: {title_prediction}")
-        
         # Add the predicted title to the results
         results = {
             **item_data,
             'predicted_title': title_prediction['predicted_title'],
             'title_prediction': title_prediction,
-            'model_title_prediction': {},
-            # 'model_title_prediction': model_title_prediction,
         }
         
         return results
@@ -344,9 +388,33 @@ class AnalyzeImageTexts:
                         'visible': prominent_text['visible'],
                         'size_category': prominent_text['size_category']
                     } if prominent_text else {}
+                    
+                    # Find brand mentions in the extracted rows
+                    brand = item.get('brand')
+                    brand_mentions = []
+                    if brand:
+                        brand_mentions = self.find_brand_mentions(extracted_rows, brand)
+                    
+                    # Extract the most prominent brand mention if found
+                    brand_mention_info = {}
+                    if brand_mentions:
+                        # Prioritize larger text for brand mentions
+                        most_prominent_brand = max(brand_mentions, key=lambda b: b['height_percentage'])
+                        brand_mention_info = {
+                            'text': most_prominent_brand['text'],
+                            'height_percentage': most_prominent_brand['height_percentage'],
+                            'position_percentage': most_prominent_brand['position_percentage'],
+                            'contrast_ratio': most_prominent_brand['contrast_ratio'],
+                            'visible': most_prominent_brand['visible'],
+                            'size_category': most_prominent_brand['size_category'],
+                            'is_exact_match': most_prominent_brand['brand_match']['is_exact_match'],
+                            'is_complete_word': most_prominent_brand['brand_match']['is_complete_word']
+                        }
                 else:
                     largest_info = {}
                     prominent_info = {}
+                    brand_mentions = []
+                    brand_mention_info = {}
 
                 item_result = {
                     **item,
@@ -355,12 +423,19 @@ class AnalyzeImageTexts:
                     'extracted_text_rows': extracted_rows,
                     'largest_text_row': largest_info,
                     'prominent_text': prominent_info,
+                    'brand_mentions': brand_mentions,
+                    'most_prominent_brand_mention': brand_mention_info,
                     'accessibility': {
                         'has_text': len(extracted_rows) > 0,
                         'all_text_visible': all(r['visible'] for r in extracted_rows) if extracted_rows else False,
                         'visible_text_percentage': round(
                             sum(1 for r in extracted_rows if r['visible']) / len(extracted_rows) * 100 
                             if extracted_rows else 0, 1
+                        ),
+                        'has_brand_mention': len(brand_mentions) > 0 if 'brand' in item else False,
+                        'brand_visibility': round(
+                            sum(1 for r in brand_mentions if r['visible']) / len(brand_mentions) * 100
+                            if brand_mentions else 0, 1
                         )
                     }
                 }
