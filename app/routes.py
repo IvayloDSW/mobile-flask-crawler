@@ -6,7 +6,6 @@ from managers.sainsburys.SainsburysScraperManager import SainsburysScraperManage
 # from models.amazon.title_predictor_demo import TitlePredictorDemo
 from models.amazon.title_prediction_service import TitlePredictionService
 from database.supabase import SupabaseManager
-import asyncio
 
 from app import app
 
@@ -91,17 +90,19 @@ def sainsburys_product_page():
     
     # scraper = SainsburysScraperManager()
     
-    crawler = SainsburysScraperManager(url)
-    asyncio.run(crawler.fetch())  # Run the async crawler
-    try:
-        result = crawler.get_result()
-        print(f"Result from SainsburysScraperManager: {result}")  # Debugging line
-        if result:
-            return jsonify(result)
-        else:
-            return jsonify({'error': 'No data found for the provided URL'}), 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'title': url})
+    
+    # crawler = SainsburysScraperManager(url)
+    # asyncio.run(crawler.fetch())  # Run the async crawler
+    # try:
+    #     result = crawler.get_result()
+    #     print(f"Result from SainsburysScraperManager: {result}")  # Debugging line
+    #     if result:
+    #         return jsonify(result)
+    #     else:
+    #         return jsonify({'error': 'No data found for the provided URL'}), 404
+    # except Exception as e:
+    #     return jsonify({'error': str(e)}), 500
     
     
     

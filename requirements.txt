@@ -14,7 +14,5 @@ scikit-learn>=1.0.0
 supabase
 dotenv
 scrapy-splash==0.9.0
-crawl4ai
-bs4
-playwright 
+
 

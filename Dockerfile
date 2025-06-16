@@ -1,40 +1,18 @@
 FROM python:3.11-bullseye
 
-# Install system dependencies required by Playwright
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    curl \
-    unzip \
-    ca-certificates \
-    fonts-liberation \
-    libnss3 \
-    libatk-bridge2.0-0 \
-    libxss1 \
-    libasound2 \
-    libgtk-3-0 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    libgbm1 \
-    && rm -rf /var/lib/apt/lists/*
+# Install system deps with verbose output
+RUN apt-get update
 
-# Set working directory
+# Create working dir
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
+# Copy requirements first for better caching
+COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install playwright
 
-# Copy app code
-COPY . .
+# Copy the rest of the app
+COPY . /app
 
-# Add and allow execution of runtime install script
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
 
-# Use shell script to install browsers at runtime
-CMD ["/app/start.sh"]
+# Run the app
+CMD ["python", "main.py"]
