@@ -1,16 +1,10 @@
-import asyncio
 from bs4 import BeautifulSoup
 from crawl4ai import *    
-
-
-
-# class SainsburysScraperManager:
 
 class SainsburysScraperManager:
     def __init__(self, url: str):
         self.url = url
         self.result = None
-       
 
     async def fetch(self):
         print(f"Fetching data from {self.url}")

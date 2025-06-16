@@ -16,4 +16,5 @@ dotenv
 scrapy-splash==0.9.0
 crawl4ai
 bs4
+playwright 
 
