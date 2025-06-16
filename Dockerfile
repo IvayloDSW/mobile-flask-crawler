@@ -24,16 +24,17 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Install Python dependencies
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install playwright
 
-# Install Playwright browsers
-RUN playwright install --with-deps
-
-# Copy application code
+# Copy app code
 COPY . .
 
-# Run the application
-CMD ["python", "main.py"]
+# Add and allow execution of runtime install script
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# Use shell script to install browsers at runtime
+CMD ["/app/start.sh"]
