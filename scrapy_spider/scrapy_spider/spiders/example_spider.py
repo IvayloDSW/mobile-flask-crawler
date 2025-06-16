@@ -43,6 +43,7 @@ class ExampleSpider(scrapy.Spider):
     def _extract_title(self, response):
         """Extract product title."""
         title = response.css('#productTitle::text').get()
+        print(f"Response _extract_title: {title}")  # Debugging line
         return title.strip() if title else None
     
     def _extract_brand(self, response):

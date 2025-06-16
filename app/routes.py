@@ -2,9 +2,11 @@ from flask import Flask, Blueprint, request, jsonify
 # from models.amazon.analyze_brand_title import ProductTitleExtractor
 from models.amazon.analyze_image_texts import AnalyzeImageTexts
 from managers.amazon.AmazonScraperManager import AmazonScraperManager
+from managers.sainsburys.SainsburysScraperManager import SainsburysScraperManager
 # from models.amazon.title_predictor_demo import TitlePredictorDemo
 from models.amazon.title_prediction_service import TitlePredictionService
 from database.supabase import SupabaseManager
+import asyncio
 
 from app import app
 
@@ -77,6 +79,31 @@ def search():
     url = data['url']
     
     return jsonify({'title': url})
+
+# Add Sainsburys crawl for product page
+@app.route('/sainsburys-product-page', methods=['POST'])
+def sainsburys_product_page():
+    data = request.get_json()
+    if not data or 'url' not in data:
+        return jsonify({'error': 'Missing "url" in request'}), 400
+    
+    url = data['url']
+    
+    # scraper = SainsburysScraperManager()
+    
+    crawler = SainsburysScraperManager(url)
+    asyncio.run(crawler.fetch())  # Run the async crawler
+    try:
+        result = crawler.get_result()
+        print(f"Result from SainsburysScraperManager: {result}")  # Debugging line
+        if result:
+            return jsonify(result)
+        else:
+            return jsonify({'error': 'No data found for the provided URL'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+    
     
 
 @app.route('/predict-title', methods=['POST'])
